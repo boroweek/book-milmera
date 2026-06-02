@@ -1,0 +1,12 @@
+{
+  "name": "MilMera Booking",
+  "short_name": "MilMera",
+  "theme_color": "#1B1E27",
+  "background_color": "#F1F3F9",
+  "display": "standalone",
+  "start_url": "/",
+  "icons": [
+    { "src": "/assets/MilMera-logo-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/assets/MilMera-logo-512.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}

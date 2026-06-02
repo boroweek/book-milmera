@@ -1,0 +1,194 @@
+# MilMera Booking — Cursor Rules
+# Файл: book-milmera/.cursorrules
+
+## Проект
+Букінг-додаток для медиків — запис пацієнтів у чергу.
+React + Vite + Tailwind v4 + Firebase. UI — українською.
+
+---
+
+## Стек
+- React 19 + Vite
+- Tailwind CSS v4 — `@import "tailwindcss"` в `src/style.css`. **Немає tailwind.config.js**
+- Firebase Auth (Google) + Firestore
+- **Без react-router** — hash-роутинг через `window.history.pushState`
+- lucide-react для іконок
+
+---
+
+## Структура
+```
+src/
+├── api/firebase.js
+├── context/AuthContext.jsx   # Google → medics collection
+├── components/
+│   ├── Navbar.jsx            # page/setPage props (не react-router)
+│   ├── Field.jsx             # exports: Field (з hint підтримкою)
+│   ├── SelectWithCustom.jsx
+│   ├── AutoTextarea.jsx
+│   └── Logo.jsx
+├── pages/
+│   ├── BookingPage.jsx       # 4-кроковий wizard
+│   ├── MyBookingsPage.jsx    # свої бронювання / всі по підрозділу (head)
+│   └── LoginPage.jsx
+└── utils/constants.js
+```
+
+---
+
+## Роутинг (App.jsx)
+**Без react-router.** Використовується `window.history.pushState`:
+```js
+// navigate('booking')     → URL: /
+// navigate('my-bookings') → URL: /my-bookings
+```
+`popstate` event синхронізує URL → state при back/forward.
+
+---
+
+## Auth — AuthContext.jsx
+- Google Sign-In → query `medics` by `email`
+- **ВАЖЛИВО:** `await setDoc(medic_uids/{uid}, { active: true })` **перед** `setMedic()` — потрібно для Firestore Rules `isMedic()`
+- `useAuth()`:
+  ```js
+  { user, medic, authLoading, medicError, authError, loginWithGoogle, logout }
+  ```
+- `medic` об'єкт:
+  ```js
+  { id, uid, name, callSign, email, phone, unitId, unitName,
+    head,       // true → бачить всі бронювання підрозділу
+    multiSlot  // true → може обирати кілька слотів
+  }
+  ```
+
+---
+
+## Firestore (що читає цей додаток)
+```
+units               name, bookingEnabled  (фільтр: bookingEnabled === true)
+employees           specialty, callSign, isMedic
+medics              email, name, callSign, unitId, unitName, head, multiSlot, uid
+medic_uids/{uid}    { active: true }
+daily_schedule/{unitId}_{date}   slots: { [specCode]: { doctorIds[], slotDuration } }
+appointments_queue  (читання і запис)
+```
+
+### appointments_queue — структура документа
+```js
+{
+  date, time, specialty,
+  unitId, unitName,
+  fullName, callSign, birthDate, militaryUnit, subdivision, rank,
+  serviceType,   // 0=Не визначено, 1=Мобілізація, 2=Контракт
+  complaint,
+  status,        // 'in_progress' | 'completed' | 'cancelled'
+  bookedBy: { uid, id, name, callSign, unit, phone, email },
+  bookingUnitId, // medic.unitId — для фільтрації керівником
+  createdAt
+}
+```
+
+---
+
+## Кастомні кольори (src/style.css @theme)
+```
+snow: #f1f3f9       smoke: #dcdee6
+silver: #6c7384     charcoal: #2f333e     midnight: #1b1e27
+red: #ed7675        light-red: #ffdfde
+blue: #6179fa       light-blue: #dbe2fd
+green: #63a84c      light-green: #e0f6d9
+lime: #d4ee6d       light-lime: #f2febf
+```
+**Увага: кольори трохи відрізняються від дашборду** (інший `silver`, `light-red`, `light-green`).
+
+---
+
+## Field компонент (src/components/Field.jsx)
+```jsx
+import { Field } from '../components/Field';
+// base inpClass class (локальна константа в BookingPage):
+const inpClass = 'w-full px-4 bg-transparent text-base md:text-sm font-medium text-midnight outline-none placeholder:text-silver';
+
+<Field label="Скарги" required hint={['Приклад 1', 'Приклад 2']}>
+  <input className={inpClass} .../>
+</Field>
+```
+- `hint` — масив рядків, показується при кліку на `?` іконку
+- `required` — додає `*` до лейблу
+- **У букінгу `inpClass` — це локальна константа, НЕ імпорт з Field**
+
+---
+
+## SelectWithCustom (src/components/SelectWithCustom.jsx)
+Ідентичний до дашборду. При `value === '__other__'` → input з ↩.
+
+---
+
+## BookingPage — кроки
+4 кроки (або 3 якщо `singleUnit`):
+
+| Крок | Умова | Зміст |
+|---|---|---|
+| 1 | тільки якщо `units.length > 1` | Вибір підрозділу |
+| 2 (або 1) | завжди | Вибір спеціаліста |
+| 3 (або 2) | завжди | Дата і час |
+| 4 (або 3) | завжди | Дані пацієнта |
+
+### sessionStorage кеш
+```js
+'milmera_units_cache'         // units[] без TTL, фільтр bookingEnabled
+`milmera_emp_${selectedUnit.id}` // { ts, data } з TTL 5 хв
+```
+
+### Форма пацієнта (form state)
+```js
+{
+  fullName: '', callSign: '', birthDate: '1990-01-01',
+  militaryUnit: '',
+  subdivision: '',      subdivisionCustom: '',
+  rank: '',             rankCustom: '',
+  serviceType: 0,
+  complaint: ''
+}
+```
+`step3Valid` перевіряє: `fullName`, `callSign`, `birthDate`, `militaryUnit`, `subdivision`, `rank`, `serviceType > 0`, `complaint`, `agreed`.
+
+---
+
+## MyBookingsPage — логіка
+```js
+// Звичайний медик:
+where('bookedBy.uid', '==', medic.uid) + where('date', '>=', weekAgo)
+// Керівник (head: true):
+where('bookingUnitId', '==', medic.unitId) + where('date', '>=', weekAgo)
+```
+Real-time через `onSnapshot`. Потрібні **composite indexes** у Firestore.
+
+Скасування: тільки `IN_PROGRESS` → `updateDoc({ status: 'cancelled', completedAt: serverTimestamp() })`.
+
+---
+
+## Constants (utils/constants.js)
+```js
+SPECIALTY_INFO    // [{ code, label, genitive, emoji, symptoms, hint? }]
+APPOINTMENT_STATUS // IN_PROGRESS | COMPLETED | CANCELLED
+SERVICE_TYPES     // ['Не визначено', 'Мобілізація', 'Контракт']
+SUBDIVISIONS      // string[]
+RANKS             // string[]
+DAYS_FULL_UK      // ['неділя','понеділок',...,'субота']
+```
+
+---
+
+## Правила коду
+- Тільки функціональні компоненти + hooks
+- Тільки Tailwind inline класи
+- Іконки тільки з `lucide-react`
+- **Без react-router** — `window.history.pushState` для навігації
+- `medic.callSign` — позивний для display, `medic.name` — ПІБ
+- `toInitials('Іванов Іван Іванович')` → `'Іванов І.І.'`
+- `fmtDate('2026-04-24')` → `'24.04.26'` (локальна функція в MyBookingsPage)
+- sessionStorage кеш для units і employees — не інвалідувати без потреби
+- `await setDoc(medic_uids/uid)` завжди **перед** `setMedic()` в AuthContext
+- Не додавати `tailwind.config.js`
+- Не імпортувати з react-router

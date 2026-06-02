@@ -1,0 +1,15 @@
+.cursorignore
+.env
+.env.local
+.firebaserc
+.vscode
+dist
+firestore.rules
+functions
+node_modules
+serviceAccountKey.json
+package-lock.json.DS_Store
+.firebase/
+.cursorrules
+
+**/.DS_Store
