@@ -86,13 +86,20 @@ function patientDisplayName(item) {
   return parts[0];
 }
 
+const TABLO_ACTIVE_STATUSES = [
+  APPOINTMENT_STATUS.IN_PROGRESS,
+  APPOINTMENT_STATUS.IN_APPOINTMENT,
+];
+
 function buildSpecialtyColumns(items, scheduledColumns) {
   const keys = new Set();
   for (const col of scheduledColumns) {
     if (col.specialty) keys.add(col.specialty);
   }
   for (const item of items) {
-    if (item.specialty) keys.add(item.specialty);
+    if (item.specialty && TABLO_ACTIVE_STATUSES.includes(item.status)) {
+      keys.add(item.specialty);
+    }
   }
 
   return [...keys]
@@ -112,7 +119,7 @@ function buildSpecialtyColumns(items, scheduledColumns) {
 function StatLine({ label, value }) {
   return (
     <div
-      className="flex items-center justify-between gap-3 py-1"
+      className="flex items-center justify-between gap-3 py-1 tracking-[0.1em]"
       style={{color: C.onSidebarMuted}}
     >
       <span className="text-base">{label}</span>
@@ -313,7 +320,10 @@ export default function DisplayQueuePage() {
     const schedKey = `${unitId}_${dateIso}`;
     getDoc(doc(db, 'daily_schedule', schedKey)).then((snap) => {
       const slots = snap.exists() ? snap.data().slots || {} : {};
-      setScheduledColumns(Object.keys(slots).map((specialty) => ({ specialty })));
+      const cols = Object.entries(slots)
+        .filter(([, data]) => (data?.doctorIds || []).length > 0)
+        .map(([specialty]) => ({ specialty }));
+      setScheduledColumns(cols);
     }).catch(() => setScheduledColumns([]));
 
     const q = query(
@@ -384,7 +394,7 @@ export default function DisplayQueuePage() {
         <div className="flex-1 min-h-0" />
 
         <div className="px-3 py-3 shrink-0">
-          <p className="text-sm capitalize tracking-[0.1em]" style={{ color: C.accent }}>
+          <p className="text-sm capitalize tracking-[0.05em]" style={{ color: C.accent }}>
             {formatDateTitle(dateIso)}
           </p>
           <p
