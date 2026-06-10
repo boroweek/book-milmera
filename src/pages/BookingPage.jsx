@@ -10,6 +10,7 @@ import {
   AlertCircle, Loader2, Info, Building2
 } from 'lucide-react';
 import { SPECIALTY_INFO, APPOINTMENT_STATUS, QUEUE_SLOT_ACTIVE, SUBDIVISIONS, RANKS, DAYS_FULL_UK } from '../utils/constants';
+import { resolveScheduleSlot } from '../utils/scheduleUtils';
 import { normalizeFullName } from '../utils/patientUtils';
 import { useAuth } from '../context/AuthContext';
 import { Field } from '../components/Field';
@@ -244,7 +245,7 @@ export default function BookingPage() {
   const minVisitDate = getRelevantDate();
   const [date, setDate]                   = useState(minVisitDate);
   const [selectedSlots, setSelectedSlots] = useState([]);
-  const [slotsData, setSlotsData]         = useState({ slots: [], booked: {}, capacity: 1 });
+  const [slotsData, setSlotsData]         = useState({ slots: [], booked: {}, capacity: 0, doctorIds: [] });
   const [slotsLoading, setSlotsLoading]   = useState(false);
   const [slotsError, setSlotsError]       = useState(null);
 
@@ -342,18 +343,19 @@ export default function BookingPage() {
         ]);
         if (!active) return;
         const specData = snap.exists() ? snap.data().slots?.[spec.code] : null;
-        if (!specData) { setSlotsError(`${spec.label} недоступний на цю дату`); setSlotsData({ slots:[], booked:{}, capacity:1 }); return; }
-        const capacity = (specData.doctorIds || []).length || 1;
-        let allSlots = generateSlots(specData.slotDuration || 20);
+        const slot = resolveScheduleSlot(specData);
+        if (!slot) { setSlotsError(`${spec.label} недоступний на цю дату`); setSlotsData({ slots:[], booked:{}, capacity:0, doctorIds:[] }); return; }
+        const { capacity, slotDuration, doctorIds } = slot;
+        let allSlots = generateSlots(slotDuration);
         if (date === new Date().toISOString().split('T')[0]) {
           const now = new Date();
           const cur = now.getHours()*60 + now.getMinutes();
           allSlots = allSlots.filter(t => { const [h,m] = t.split(':').map(Number); return h*60+m > cur+5; });
         }
-        if (!allSlots.length) { setSlotsError(`${spec.label} недоступний на цю дату`); setSlotsData({ slots:[], booked:{}, capacity:1 }); return; }
+        if (!allSlots.length) { setSlotsError(`${spec.label} недоступний на цю дату`); setSlotsData({ slots:[], booked:{}, capacity:0, doctorIds:[] }); return; }
         const booked = {};
         qSnap.docs.forEach(d => { const t = d.data().time; booked[t]=(booked[t]||0)+1; });
-        setSlotsData({ slots: allSlots, booked, capacity });
+        setSlotsData({ slots: allSlots, booked, capacity, doctorIds });
       } catch { setSlotsError('Помилка завантаження даних'); }
       finally { if (active) setSlotsLoading(false); }
     };
@@ -392,9 +394,9 @@ export default function BookingPage() {
           const schedKey  = `${selectedUnit.id}_${date}`;
           const schedSnap = await tx.get(doc(db,'daily_schedule',schedKey));
           if (!schedSnap.exists()) throw new Error('Графік не знайдено.');
-          const specData = schedSnap.data().slots?.[spec.code];
-          if (!specData) throw new Error(`${spec.label} недоступний.`);
-          const cap = (specData.doctorIds||[]).length || 1;
+          const slot = resolveScheduleSlot(schedSnap.data().slots?.[spec.code]);
+          if (!slot) throw new Error(`${spec.label} недоступний.`);
+          const cap = slot.capacity;
           // IN_PROGRESS і COMPLETED займають слот
           const cnt = await getCountFromServer(query(
             collection(db,'appointments_queue'),
@@ -417,7 +419,7 @@ export default function BookingPage() {
             status:       APPOINTMENT_STATUS.IN_PROGRESS,
             bookedBy:       { uid: authUid, id: medic.id, name: medic.name, callSign: medic.callSign || '', unit: medic.unitName || '', phone: medic.phone || '', email: medic.email },
             bookingUnitId:  medic.unitId || null,
-            ...(dentistId ? {
+            ...(dentistId && slot.doctorIds.includes(dentistId) ? {
               preferredDoctorId:   dentistId,
               preferredDoctorCallSign: selDentist?.callSign||'',
             } : {}),
@@ -438,7 +440,7 @@ export default function BookingPage() {
   const handleReset = () => {
     setStep(1); setSuccess(false); setLastAppts([]);
     setSpec(null); setDentistId(''); setSelectedSlots([]);
-    setDate(minVisitDate); setSlotsData({ slots:[], booked:{}, capacity:1 }); setSlotsError(null);
+    setDate(minVisitDate); setSlotsData({ slots:[], booked:{}, capacity:0, doctorIds:[] }); setSlotsError(null);
     const unitName = medic?.unitName || '';
     const inList = SUBDIVISIONS.includes(unitName);
     setForm({ 
