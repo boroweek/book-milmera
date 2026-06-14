@@ -11,7 +11,7 @@ import {
 } from 'lucide-react';
 import { SPECIALTY_INFO, APPOINTMENT_STATUS, QUEUE_SLOT_ACTIVE, SUBDIVISIONS, RANKS, DAYS_FULL_UK } from '../utils/constants';
 import { resolveScheduleSlot } from '../utils/scheduleUtils';
-import { normalizeFullName } from '../utils/patientUtils';
+import { normalizeFullName, sanitizeMilUnit } from '../utils/patientUtils';
 import { useAuth } from '../context/AuthContext';
 import { Field } from '../components/Field';
 import { SelectWithCustom } from '../components/SelectWithCustom';
@@ -57,6 +57,11 @@ const toInitials = (fullName) => {
   const parts = fullName.trim().split(/\s+/);
   if (parts.length < 2) return fullName;
   return `${parts[0]} ${parts.slice(1).map(p => p[0]+'.').join('')}`;
+};
+const formatPatientLabel = (fullName, callSign) => {
+  const label = toInitials(fullName);
+  const cs = (callSign || '').trim();
+  return cs ? `${label} (${cs})` : label;
 };
 
 const MONTHS_UK    = ['Січня','Лютого','Березня','Квітня','Травня','Червня','Липня','Серпня','Вересня','Жовтня','Листопада','Грудня'];
@@ -412,7 +417,7 @@ export default function BookingPage() {
             fullName:     normalizeFullName(form.fullName.trim()),
             callSign:     normalizeFullName(form.callSign.trim()),
             birthDate:    Timestamp.fromDate(new Date(form.birthDate)),
-            militaryUnit: form.militaryUnit,
+            militaryUnit: sanitizeMilUnit(form.militaryUnit),
             subdivision:  subFinal,
             rank:         rankFinal,
             serviceType:  Number(form.serviceType),
@@ -428,8 +433,19 @@ export default function BookingPage() {
             createdAt: serverTimestamp(),
           });
         });
-        results.push({ date, time, specialty: spec.label, fullName: form.fullName, unitName: selectedUnit.name });
-        saveBooking({ date, time, specialty: spec.label, nameShort: toInitials(form.fullName), unitName: selectedUnit.name });
+        results.push({
+          date, time,
+          specialty: spec.label,
+          specialtyGenitive: spec.genitive || spec.label.toLowerCase(),
+          fullName: form.fullName,
+          callSign: form.callSign.trim(),
+          unitName: selectedUnit.name,
+        });
+        saveBooking({
+          date, time, specialty: spec.label,
+          nameShort: formatPatientLabel(form.fullName, form.callSign.trim()),
+          unitName: selectedUnit.name,
+        });
       }
       setLastAppts(results);
       setSuccess(true);
@@ -456,7 +472,10 @@ export default function BookingPage() {
 
   const handleCopy = () => {
     navigator.clipboard.writeText(
-      lastAppts.map(a => `${a.date.split('-').reverse().join('.')} о ${a.time} (${a.specialty}) — ${a.fullName}`).join('\n')
+      lastAppts.map(a => {
+        const specLine = a.specialtyGenitive || a.specialty.toLowerCase();
+        return `${a.date.split('-').reverse().join('.')} о ${a.time} — ${formatPatientLabel(a.fullName, a.callSign)}, запис до ${specLine}`;
+      }).join('\n')
     );
     setCopied(true); setTimeout(() => setCopied(false), 2000);
   };
@@ -498,8 +517,12 @@ export default function BookingPage() {
                 <p className="text-base font-semibold text-midnight">
                   {(() => { const d = parseDateStr(a.date); return `${d.getDate()} ${MONTHS_UK[d.getMonth()].toLowerCase()} ${d.getFullYear()} р. на ${a.time}`; })()}
                 </p>
-                <p className="text-sm font-semibold text-midnight mt-0.5">{a.fullName}</p>
-                <p className="text-sm text-silver font-medium">до {a.specialty.toLowerCase()}</p>
+                <p className="text-sm font-semibold text-midnight mt-0.5">
+                  {formatPatientLabel(a.fullName, a.callSign)}
+                </p>
+                <p className="text-sm text-silver font-medium">
+                  Записано до {a.specialtyGenitive || a.specialty.toLowerCase()}
+                </p>
               </div>
             ))}
           </div>
@@ -766,7 +789,8 @@ export default function BookingPage() {
               <div className="relative">
                 <input required name="milmera-patient-military-unit" autoComplete="off" placeholder="А0000" maxLength={5} value={form.militaryUnit}
                   className={`${inpClass} uppercase`}
-                  onChange={e => setField('militaryUnit', e.target.value.toUpperCase().replace(/[^А-ЯІЇЄҐ0-9\s]/gi, ''))}/>
+                  onKeyDown={e => { if (e.key === ' ') e.preventDefault(); }}
+                  onChange={e => setField('militaryUnit', sanitizeMilUnit(e.target.value))}/>
                 <Hash size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-silver pointer-events-none"/>
               </div>
             </Field>
