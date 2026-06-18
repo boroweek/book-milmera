@@ -31,11 +31,6 @@ html, body, #root {
 
 button { cursor: pointer; }
 
-input[type="date"] {
-  -webkit-appearance: none;
-  appearance: none;
-}
-
 input[type="date"]::-webkit-calendar-picker-indicator {
   opacity: 0;
   position: absolute;
@@ -43,6 +38,19 @@ input[type="date"]::-webkit-calendar-picker-indicator {
   width: 2.5rem;
   height: 1rem;
   cursor: pointer;
+}
+
+input[type="date"]::-webkit-inner-spin-button,
+input[type="date"]::-webkit-clear-button {
+  display: none;
+}
+
+input.birth-date-input.birth-date-empty::-webkit-datetime-edit {
+  color: var(--color-silver);
+}
+
+input.birth-date-input.birth-date-empty {
+  color: var(--color-silver);
 }
 
 

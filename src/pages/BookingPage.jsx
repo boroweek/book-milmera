@@ -6,7 +6,7 @@ import {
 } from 'firebase/firestore';
 import {
   Check, ChevronLeft, ChevronRight, ChevronDown, Copy,
-  User, Calendar as CalendarIcon, Hash, ShieldCheck, X,
+  User, Hash, ShieldCheck, X,
   AlertCircle, Loader2, Info, Building2
 } from 'lucide-react';
 import { SPECIALTY_INFO, APPOINTMENT_STATUS, QUEUE_SLOT_ACTIVE, SUBDIVISIONS, RANKS, DAYS_FULL_UK } from '../utils/constants';
@@ -784,9 +784,7 @@ export default function BookingPage() {
                 max={maxBirth}
                 className={inpClass}
                 onChange={(v) => setField('birthDate', v)}
-              >
-                <CalendarIcon size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-silver pointer-events-none"/>
-              </BirthDateInput>
+              />
             </Field>
             
             <Field label="Тип служби" required invalid={fieldInvalid.serviceType}>

@@ -1,10 +1,20 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
+import { Calendar, X } from 'lucide-react';
 
-const isoToDisplay = (iso) => {
+const isoToDigits = (iso) => {
   if (!iso || !/^\d{4}-\d{2}-\d{2}$/.test(iso)) return '';
   const [y, m, d] = iso.split('-');
-  return `${d}.${m}.${y}`;
+  return d + m + y;
 };
+
+const formatFromDigits = (digits) => {
+  let s = digits.slice(0, 2);
+  if (digits.length > 2) s += '.' + digits.slice(2, 4);
+  if (digits.length > 4) s += '.' + digits.slice(4, 8);
+  return s;
+};
+
+const isoToDisplay = (iso) => formatFromDigits(isoToDigits(iso));
 
 const digitsToIso = (digits) => {
   if (digits.length !== 8) return null;
@@ -22,12 +32,6 @@ const digitsToIso = (digits) => {
     date.getDate() !== day
   ) return null;
   return `${y}-${m}-${d}`;
-};
-
-const formatDigits = (digits) => {
-  if (digits.length <= 2) return digits;
-  if (digits.length <= 4) return `${digits.slice(0, 2)}.${digits.slice(2)}`;
-  return `${digits.slice(0, 2)}.${digits.slice(2, 4)}.${digits.slice(4)}`;
 };
 
 const isValidPartial = (d) => {
@@ -67,36 +71,53 @@ const parsePastedDate = (text) => {
   return digits.length === 8 ? digitsToIso(digits) : null;
 };
 
-export function BirthDateInput({
+function useIsDesktop() {
+  const [isDesktop, setIsDesktop] = useState(
+    () => typeof window !== 'undefined' && window.matchMedia('(min-width: 768px)').matches,
+  );
+
+  useEffect(() => {
+    const mq = window.matchMedia('(min-width: 768px)');
+    const onChange = () => setIsDesktop(mq.matches);
+    mq.addEventListener('change', onChange);
+    return () => mq.removeEventListener('change', onChange);
+  }, []);
+
+  return isDesktop;
+}
+
+function MobileBirthDateInput({
   value,
   onChange,
   min,
   max,
-  className = '',
+  className,
   required,
-  children,
   onBlur,
+  setTouched,
+  isInvalid,
+  clearIconSize = 14,
   ...rest
 }) {
   const [display, setDisplay] = useState(() => isoToDisplay(value));
-  const [touched, setTouched] = useState(false);
+  const editingRef = useRef(false);
 
   useEffect(() => {
-    setDisplay(isoToDisplay(value));
+    if (!editingRef.current) setDisplay(isoToDisplay(value));
   }, [value]);
 
   const commitDigits = (digits) => {
-    const formatted = formatDigits(digits);
-    setDisplay(formatted);
+    setDisplay(formatFromDigits(digits));
     if (digits.length === 8) {
       const iso = digitsToIso(digits);
-      onChange(iso && inRange(iso, min, max) ? iso : '');
-    } else {
+      if (iso && inRange(iso, min, max)) onChange(iso);
+    } else if (digits.length === 0) {
       onChange('');
     }
   };
 
   const handleChange = (e) => {
+    editingRef.current = true;
     const newDigits = e.target.value.replace(/\D/g, '');
     const oldDigits = display.replace(/\D/g, '');
     const digits = newDigits.length < oldDigits.length
@@ -109,20 +130,37 @@ export function BirthDateInput({
     e.preventDefault();
     const iso = parsePastedDate(e.clipboardData.getData('text'));
     if (iso && inRange(iso, min, max)) {
+      editingRef.current = false;
       onChange(iso);
       setDisplay(isoToDisplay(iso));
     }
   };
 
   const handleBlur = (e) => {
+    editingRef.current = false;
     setTouched(true);
+    const digits = display.replace(/\D/g, '');
+    if (digits.length === 0) {
+      onChange('');
+      setDisplay('');
+    } else if (digits.length === 8) {
+      const iso = digitsToIso(digits);
+      if (iso && inRange(iso, min, max)) {
+        if (iso !== value) onChange(iso);
+        setDisplay(isoToDisplay(iso));
+      } else {
+        setDisplay(isoToDisplay(value));
+      }
+    }
     onBlur?.(e);
   };
 
-  const digits = display.replace(/\D/g, '');
-  const iso = digits.length === 8 ? digitsToIso(digits) : null;
-  const hasValidValue = !!(iso && inRange(iso, min, max));
-  const isInvalid = touched && !hasValidValue;
+  const handleClear = () => {
+    editingRef.current = false;
+    setDisplay('');
+    onChange('');
+    setTouched(true);
+  };
 
   return (
     <div className={`relative${isInvalid ? ' field-invalid' : ''}`}>
@@ -133,13 +171,81 @@ export function BirthDateInput({
         value={display}
         required={required}
         maxLength={10}
-        className={`birth-date-input ${className}`.trim()}
+        className={`birth-date-input w-full pr-10 ${className}`.trim()}
         onChange={handleChange}
         onPaste={handlePaste}
         onBlur={handleBlur}
         {...rest}
       />
-      {children}
+      {value && (
+        <button
+          type="button"
+          onClick={handleClear}
+          className="absolute right-3 top-1/2 -translate-y-1/2 text-silver hover:text-midnight"
+          aria-label="Очистити дату"
+        >
+          <X size={clearIconSize} />
+        </button>
+      )}
     </div>
+  );
+}
+
+export function BirthDateInput({
+  value,
+  onChange,
+  min,
+  max,
+  className = '',
+  required,
+  children,
+  onBlur,
+  ...rest
+}) {
+  const [touched, setTouched] = useState(false);
+  const isDesktop = useIsDesktop();
+  const isEmpty = !value;
+  const hasValidValue = !!(value && inRange(value, min, max));
+  const isInvalid = touched && !hasValidValue;
+
+  const handleDesktopBlur = (e) => {
+    setTouched(true);
+    onBlur?.(e);
+  };
+
+  if (isDesktop) {
+    return (
+      <div className={`relative${isInvalid ? ' field-invalid' : ''}`}>
+        <input
+          type="date"
+          value={value}
+          min={min}
+          max={max}
+          required={required}
+          className={`birth-date-input w-full pr-10${isEmpty ? ' birth-date-empty' : ''} ${className}`.trim()}
+          onChange={(e) => onChange(e.target.value)}
+          onBlur={handleDesktopBlur}
+          {...rest}
+        />
+        <Calendar size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-silver pointer-events-none" />
+        {children}
+      </div>
+    );
+  }
+
+  return (
+    <MobileBirthDateInput
+      value={value}
+      onChange={onChange}
+      min={min}
+      max={max}
+      className={className}
+      required={required}
+      onBlur={onBlur}
+      setTouched={setTouched}
+      isInvalid={isInvalid}
+      clearIconSize={14}
+      {...rest}
+    />
   );
 }
