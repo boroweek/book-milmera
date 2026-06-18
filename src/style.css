@@ -45,18 +45,6 @@ input[type="date"]::-webkit-calendar-picker-indicator {
   cursor: pointer;
 }
 
-input[type="date"]::-webkit-inner-spin-button,
-input[type="date"]::-webkit-clear-button {
-  display: none;
-}
-
-input.birth-date-input.birth-date-empty::-webkit-datetime-edit {
-  color: var(--color-silver);
-}
-
-input.birth-date-input.birth-date-empty {
-  color: var(--color-silver);
-}
 
 @keyframes tablo-appointment-enter {
   from {

@@ -268,11 +268,13 @@ export default function BookingPage() {
   });
   const [agreed, setAgreed]         = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [touched, setTouched]       = useState({});
 
   const today    = new Date();
   const maxBirth = today.toISOString().split('T')[0];
   const minBirth = new Date(today.getFullYear()-100, today.getMonth(), today.getDate()).toISOString().split('T')[0];
   const setField = (k, v) => setForm(p => ({ ...p, [k]: v }));
+  const touchField = (key) => () => setTouched(p => ({ ...p, [key]: true }));
 
   // Load units on mount — getDocs with sessionStorage cache
   useEffect(() => {
@@ -380,6 +382,22 @@ export default function BookingPage() {
     const rank  = form.rank === '__other__' ? form.rankCustom.trim() : form.rank.trim();
     return !!(base && sub && rank && agreed);
   }, [form, agreed]);
+
+  const fieldInvalid = useMemo(() => {
+    const subdivisionValue = form.subdivision === '__other__' ? form.subdivisionCustom.trim() : form.subdivision.trim();
+    const rankValue = form.rank === '__other__' ? form.rankCustom.trim() : form.rank.trim();
+    const militaryUnit = form.militaryUnit.trim();
+
+    return {
+      fullName: touched.fullName && !form.fullName.trim(),
+      callSign: touched.callSign && !form.callSign.trim(),
+      serviceType: touched.serviceType && Number(form.serviceType) === 0,
+      militaryUnit: touched.militaryUnit && (!militaryUnit || militaryUnit.length < 5),
+      subdivision: touched.subdivision && !subdivisionValue,
+      rank: touched.rank && !rankValue,
+      complaint: touched.complaint && !(form.complaint || '').trim(),
+    };
+  }, [form, touched]);
 
   const handleSubmit = async () => {
     if (!step3Valid || submitting || !selectedUnit || !medic) return;
@@ -741,17 +759,17 @@ export default function BookingPage() {
         <div className="space-y-3">
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            <Field label="ПІБ пацієнта" required>
+            <Field label="ПІБ пацієнта" required invalid={fieldInvalid.fullName}>
               <div className="relative">
                 <input required name="milmera-patient-pib" autoComplete="off" placeholder="Прізвище Ім'я По батькові" value={form.fullName}
-                  className={inpClass} onChange={e => setField('fullName', normalizeFullName(e.target.value))}/>
+                  className={inpClass} onChange={e => setField('fullName', normalizeFullName(e.target.value))} onBlur={touchField('fullName')}/>
                 <User size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-silver pointer-events-none"/>
               </div>
             </Field>
 
-            <Field label="Позивний" required>
+            <Field label="Позивний" required invalid={fieldInvalid.callSign}>
               <input required name="milmera-patient-callsign" autoComplete="off" placeholder="Позивний пацієнта" value={form.callSign}
-                className={inpClass} onChange={e => setField('callSign', normalizeFullName(e.target.value))}/>
+                className={inpClass} onChange={e => setField('callSign', normalizeFullName(e.target.value))} onBlur={touchField('callSign')}/>
             </Field>
           </div>
 
@@ -771,9 +789,10 @@ export default function BookingPage() {
               </BirthDateInput>
             </Field>
             
-            <Field label="Тип служби" required>
+            <Field label="Тип служби" required invalid={fieldInvalid.serviceType}>
               <div className="relative">
                 <select required name="milmera-patient-service" autoComplete="off" value={form.serviceType} onChange={e => setField('serviceType', e.target.value)}
+                  onBlur={touchField('serviceType')}
                   className={`${inpClass} appearance-none cursor-pointer${+form.serviceType === 0 ? ' [:not(:focus)]:text-silver' : '' }`}>
                   {SERVICE_TYPES.map((t, i) => (
                     <option key={i} value={i}>{t}</option>
@@ -785,17 +804,18 @@ export default function BookingPage() {
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-            <Field label="Номер в/ч" required>
+            <Field label="Номер в/ч" required invalid={fieldInvalid.militaryUnit}>
               <div className="relative">
                 <input required name="milmera-patient-military-unit" autoComplete="off" placeholder="А0000" maxLength={5} value={form.militaryUnit}
                   className={`${inpClass} uppercase`}
                   onKeyDown={e => { if (e.key === ' ') e.preventDefault(); }}
-                  onChange={e => setField('militaryUnit', sanitizeMilUnit(e.target.value))}/>
+                  onChange={e => setField('militaryUnit', sanitizeMilUnit(e.target.value))}
+                  onBlur={touchField('militaryUnit')}/>
                 <Hash size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-silver pointer-events-none"/>
               </div>
             </Field>
 
-            <Field label="Підрозділ (скорочено)" required>
+            <Field label="Підрозділ (скорочено)" required invalid={fieldInvalid.subdivision}>
               <SelectWithCustom
                 name="milmera-patient-subdivision"
                 options={SUBDIVISIONS}
@@ -804,12 +824,13 @@ export default function BookingPage() {
                 onChange={v => setField('subdivision', v)}
                 onCustomChange={v => setField('subdivisionCustom', v)}
                 onReset={() => { setField('subdivision', ''); setField('subdivisionCustom', ''); }}
+                onBlur={touchField('subdivision')}
                 placeholder="Назва підрозділу"
                 otherLabel="Інший..."
               />
             </Field>
 
-            <Field label="Звання" required>
+            <Field label="Звання" required invalid={fieldInvalid.rank}>
               <SelectWithCustom
                 name="milmera-patient-rank"
                 options={RANKS}
@@ -818,19 +839,21 @@ export default function BookingPage() {
                 onChange={v => setField('rank', v)}
                 onCustomChange={v => setField('rankCustom', v)}
                 onReset={() => { setField('rank', ''); setField('rankCustom', ''); }}
+                onBlur={touchField('rank')}
                 placeholder="Введіть звання"
                 otherLabel="Інше..."
               />
             </Field>
           </div>
 
-          <Field label="Скарги та розвиток симптомів" required hint={[
+          <Field label="Скарги та розвиток симптомів" required invalid={fieldInvalid.complaint} hint={[
             'Кашель і температура до 38°C, почалися 3 дні тому, кашель став сильнішим',
             'Біль у попереку після фізичного навантаження, триває 5 днів, посилюється при русі',
             'Слабкість і запаморочення, почалися сьогодні зранку, поступово посилюються',
             'Висип на руках, зʼявився тиждень тому, поступово поширюється, є свербіж',
           ]}>
             <AutoTextarea name="milmera-patient-complaint" autoComplete="off" value={form.complaint} onChange={e => setField('complaint', e.target.value)}
+              onBlur={touchField('complaint')}
               placeholder="Опишіть симптоми, коли вони зʼявилися та як змінювались" maxRows={6} className={inpClass}/>
           </Field>
         </div>

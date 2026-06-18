@@ -1,9 +1,13 @@
 import { useState } from 'react';
 
-export function Field({ label, children, required = false, hint }) {
+export function Field({ label, children, required = false, hint, invalid = false }) {
   const [showHint, setShowHint] = useState(false);
+  const borderClass = invalid
+    ? 'border-red focus-within:border-red focus-within:ring-red/10'
+    : 'border-silver/40 focus-within:border-blue focus-within:ring-blue/10 has-[.field-invalid]:border-red has-[.field-invalid]:focus-within:border-red has-[.field-invalid]:focus-within:ring-red/10';
+
   return (
-    <div className="relative bg-white border border-silver/40 rounded-2xl pt-3 pb-2.5 focus-within:border-blue focus-within:ring-3 focus-within:ring-blue/10 group">
+    <div className={`relative bg-white border rounded-2xl pt-3 pb-2.5 focus-within:ring-3 group ${borderClass}`}>
       <div className="flex items-center justify-between px-5 mb-1">
         <span className="text-[11px] font-medium text-silver uppercase tracking-widest group-focus-within:text-midnight">
           {label}

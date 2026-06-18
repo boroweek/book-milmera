@@ -11,6 +11,7 @@ export function SelectWithCustom({
   otherLabel = 'Інше...',
   name,
   autoComplete = 'off',
+  onBlur,
 }) {
   const isCustom = value === '__other__' || (value !== '' && !options.includes(value));
 
@@ -24,6 +25,7 @@ export function SelectWithCustom({
           placeholder={placeholder}
           value={displayValue}
           onChange={e => onCustomChange(e.target.value)}
+          onBlur={onBlur}
           className="w-full bg-transparent text-sm font-medium text-midnight outline-none placeholder:text-silver"
         />
         <button
@@ -44,6 +46,7 @@ export function SelectWithCustom({
         autoComplete={autoComplete}
         value={value}
         onChange={e => onChange(e.target.value)}
+        onBlur={onBlur}
         className={`w-full px-4 bg-transparent text-sm font-medium text-midnight outline-none placeholder:text-silver appearance-none cursor-pointer ${value == '' ? '[:not(:focus)]:text-silver' : '' }`}
       >
         <option value="">Оберіть...</option>
